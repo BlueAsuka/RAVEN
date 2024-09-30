@@ -1,0 +1,12 @@
+{
+    "DEFAULT_SMOOTHING_METHOD": "savgol_filter",
+    "MA_SMOOTH_WINDOW": 15,
+    "EWA_SPAN": 10,
+    "GAUSSIAN_SIGMA": 2,
+    "SAVGOL_WINDOW_SIZE": 15,
+    "SAVGOL_POLYORDER": 2,
+    "RANDOM_STATE": 42,
+
+    "EPOCHS": 300,
+    "NUM_RUNS": 5
+}
