@@ -1,6 +1,10 @@
-numpy
-pandas
+tqdm
 tsai
+pyts
+numpy
+scipy
+pandas
 loguru
 PyWavelets
 matplotlib
+scikit-learn

@@ -1,3 +1,3 @@
 RAVEN
 
-Romdon WAVelet KErNels for Time Series Classification
+Romdon wAVelet KErNels for Time Series Classification
