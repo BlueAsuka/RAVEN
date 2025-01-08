@@ -11,7 +11,7 @@
     "NUM_RUNS": 5,
 
     "LOWER_BOUND": 0.1,
-    "UPPER_BOUND": 1000,
-    "N_KERNELS": 1000,
+    "UPPER_BOUND": 500,
+    "N_KERNELS": 700,
     "WAVELET": "morl"
 }

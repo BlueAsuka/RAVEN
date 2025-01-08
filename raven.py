@@ -7,6 +7,7 @@ import numpy as np
 from data_loader import get_X_y
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import RidgeClassifierCV
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
@@ -26,10 +27,26 @@ def minmax_scale(X):
     minmax_result = 2 * (X - np.min(X, axis=1, keepdims=True)) / (np.max(X, axis=1, keepdims=True) - np.min(X, axis=1, keepdims=True)) - 1
     return minmax_result
 
+# def raven(sample, random_scales, wavelet):
+#     coefficients, _ = pywt.cwt(sample, random_scales, wavelet, method='conv')
+#     res = np.trapz(coefficients, axis=1) 
+#     return res
+
 def raven(sample, random_scales, wavelet):
-    coefficients, _ = pywt.cwt(sample, random_scales, wavelet, method='conv')
-    integral = np.array([np.trapz(coeff) for coeff in coefficients])
-    return integral
+    # Precompute wavelet kernels for all scales
+    wavelet_kernels = [pywt.ContinuousWavelet(wavelet).wavefun(s)[0] for s in random_scales]
+    
+    # Compute CWT using FFT-based convolution for efficiency
+    sample_fft = np.fft.rfft(sample)
+    coefficients = []
+    for kernel in wavelet_kernels:
+        kernel_fft = np.fft.rfft(kernel, n=len(sample))
+        conv_result = np.fft.irfft(sample_fft * kernel_fft, n=len(sample))
+        coefficients.append(conv_result)
+    
+    # Compute integral using a faster method
+    res = np.trapz(coefficients, axis=1)  # Apply trapz to all coefficients at once
+    return np.array(res)
 
 def raven_parallel(X, random_scales, wavelet, max_workers=8):
     raven_results = []
@@ -46,7 +63,7 @@ if __name__ == "__main__":
               'backlash1', 'backlash2',
               'lackLubrication1', 'lackLubrication2',
               'spalling1', 'spalling2', 'spalling3', 'spalling4', 'spalling5', 'spalling6', 'spalling7', 'spalling8']
-    LOADS= ['20kg', '40kg', '-40kg']
+    LOADS = ['20kg', '40kg', '-40kg']
     
     load = '20kg'
     filenames_20kg = [os.listdir(os.path.join(INSTANCES_DIR, load, state)) for state in STATES]
