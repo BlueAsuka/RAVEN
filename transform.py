@@ -1,18 +1,14 @@
-import re
 import os
 import json
 import loguru
 import pandas as pd
 import numpy as np
 
+from typing import Tuple
+from pathlib import Path
+from pyts.transformation import ROCKET
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
-from sklearn.metrics.pairwise import cosine_similarity
-from typing import Tuple, List
-from pathlib import Path
-# from tsai.models import MINIROCKET_Pytorch
-from pyts.transformation import ROCKET
-# from openai import OpenAI
 
 
 class TimeSeriesTransform:
@@ -141,115 +137,6 @@ class TimeSeriesTransform:
         pass
 
 
-class TextTransform:
-    """Build the semantic chunker for text splitting """
-    def __init__(self, cfg) -> None:
-        self.cfg = cfg
-        
-    def split_text(self, text: str) -> List[str]:
-        """Split the given text based on the semantic structure of the text
-        
-        Args:
-            text (str): The text to be split
-
-        Returns:
-            list[str]: The list of chunks
-        """
-        
-        split_sents = self._split_sentences(text)
-        combin_sents = self._combine_sentences(split_sents)
-        sents_embeds = self.get_embedding_from_openai(combin_sents)
-        sents_dists = self._calculate_cosine_similarity(sents_embeds)
-        
-        breakpoint_percentile_threshold = 80
-        breakpoint_distance_threshold = np.percentile(sents_dists, breakpoint_percentile_threshold)
-        
-        indices_above_thresh = [i for i, distance in enumerate(sents_dists) if distance > breakpoint_distance_threshold]
-        
-        chunks = []
-        start_index = 0
-        for index in indices_above_thresh:
-            chunk = ' '.join(split_sents[start_index:index+1])
-            chunks.append(chunk)
-            start_index = index + 1
-        
-        if start_index < len(split_sents):
-            chunk = ' '.join(split_sents[start_index:])
-            chunks.append(chunk)
-        
-        return chunks
-    
-    def get_embedding_from_openai(self, texts: str) -> List[float]:
-        """Get the embedding from OpenAI API"""
-        
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        
-        try:
-            response = client.embeddings.create(
-                input=texts,
-                model=self.cfg['EMB_MODEL']
-            )
-            embeddings = np.array([item.embedding for item in response.data])
-            return embeddings
-        except Exception as e:
-            print("An error occurred:", e)
-            return np.array([])  # Return an empty array in case of an error
-
-    def _split_sentences(self, text: str) -> List[str]:
-        """Split the given text into sentences based on punctuation followed by whitespace.
-        
-        Args:
-            text (str): The text to be split into sentences
-
-        Returns:
-            list[str]: The list of sentences
-        """
-        
-        return  re.split(r'(?<=[.?!])\s+', text)
-
-    def _combine_sentences(self, sentences: List[str]) -> List[str]:
-        """ Create a buffer by combining each sentence with its previous and next sentence to provide a wider context. 
-        For example, combine sentences 1,2,3 and 2,3,4 before computing the cosine simiality.
-        
-        Args:
-            sentences (list[str]): The list of sentences to be combined
-            
-        Returns:
-            list[str]: The list of combined sentences
-        """
-        
-        combined_sentences = []
-        for i in range(len(sentences)):
-            combined_sentence = sentences[i]
-            if i > 0:
-                combined_sentence = sentences[i-1] + ' ' + combined_sentence
-            if i < len(sentences) - 1:
-                combined_sentence += ' ' + sentences[i+1]
-            combined_sentences.append(combined_sentence)
-        return combined_sentences
-
-    def _calculate_cosine_similarity(self, embeddings: np.ndarray) -> List[float]:
-        """ Calculate the cosine distance (1 - cosine similarity) between consecutive embeddings.
-        
-        Args:
-            embeddings (np.ndarray): The embeddings to be compared
-            
-        Returns:
-            list[float]: The list of cosine distances
-        """
-        
-        distances = []
-        for i in range(len(embeddings) - 1):
-            similarity = cosine_similarity([embeddings[i]], [embeddings[i + 1]])[0][0]
-            distance = 1 - similarity
-            distances.append(distance)
-        return distances
-
-
-class ImageTransform:
-    pass
-
-
 if __name__ == "__main__":
     cfg_path = os.path.join(
             os.path.abspath(Path(os.path.dirname(__file__)).parent.absolute()),
@@ -258,9 +145,4 @@ if __name__ == "__main__":
     cfg = json.load(open(cfg_path))
     
     loguru.logger.debug(f"Testing the time series transformation")
-    ts_trans = TimeSeriesTransform(cfg=cfg)
-    loguru.logger.debug(f"Testing the text transformation")
-    txt_trans = TextTransform(cfg=cfg)
-    # loguru.logger.debug(f"Testing the image transformation")
-    # img_trans = ImageTransform(cfg=cfg)
-    loguru.logger.debug(f"DONE")
+    ts_trans = TimeSeriesTransform(cfg=cfg)   
