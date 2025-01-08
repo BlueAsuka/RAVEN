@@ -8,5 +8,10 @@
     "RANDOM_STATE": 42,
 
     "EPOCHS": 300,
-    "NUM_RUNS": 5
+    "NUM_RUNS": 5,
+
+    "LOWER_BOUND": 0.1,
+    "UPPER_BOUND": 1000,
+    "N_KERNELS": 1000,
+    "WAVELET": "morl"
 }
