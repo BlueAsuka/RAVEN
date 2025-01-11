@@ -12,6 +12,6 @@
 
     "LOWER_BOUND": 0.1,
     "UPPER_BOUND": 500,
-    "N_KERNELS": 700,
+    "N_KERNELS": 300,
     "WAVELET": "morl"
 }
