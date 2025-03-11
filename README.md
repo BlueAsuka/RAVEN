@@ -31,9 +31,13 @@ Python >= 3.10
 
 ##### Commmands
 run `data_processing.py` for dataset construction
+
 run `baseline.py` for comparision to other models
+
 run `raven.py` for runing the raven model to get the results
+
 
 ##### Notebooks
 `raven_demo.ipynb` for illustating the step-by-step process of the raven model.
+
 `feature_viz.ipynb` for visualizing the features extracted by the raven model, the PCA result and the health indicator results.
