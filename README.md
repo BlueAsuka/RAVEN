@@ -29,7 +29,8 @@ According to the data description, for each type of fualt under a specific load,
 ### Run
 
 ##### Requirements
-Python >= 3.10
+The code is tested and run on the Windows10 OS, the code is written in Python 3.10. The requirements are listed in the `requirements.txt` file. To install all of them, run:
+`pip install -r requirements.txt`
 
 ##### Commmands
 run `data_processing.py` for dataset construction
@@ -37,7 +38,6 @@ run `data_processing.py` for dataset construction
 run `baseline.py` for comparision to other models
 
 run `raven.py` for runing the raven model to get the results
-
 
 ##### Notebooks
 `raven_demo.ipynb` for illustating the step-by-step process of the raven model.
