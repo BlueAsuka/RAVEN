@@ -22,6 +22,8 @@ Only data under trapezodial motion profile is selected. The figure of the motion
 
 In `instances` and `inference`, there are three subfolders namely `20kg`, `40kg` and `-40kg`, which are the three different loads. The data in each subfolder is collected under the same load but in different states.
 
+![](assets/current.PNG)
+
 According to the data description, for each type of fualt under a specific load, there are 5 (experiement trials) $\times$ 10 (repeated times in each experiment trials) groups of data. Within these 50 files in instances, a protion (e.g. 30%) of files will be randomly selected to be the inference set for evaluating the system later. 
 
 ### Run
