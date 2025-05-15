@@ -1,3 +1,4 @@
+import re
 import os
 import ast
 import sys
@@ -42,9 +43,13 @@ def construct_dataset(filenames: List[str], load:str, train: bool=True):
     return np.array(X), np.array(y)
 
 
-def fit_and_evaluate_model(dls, X_t, y_t, model: str):
-    learn = ts_learner(dls, model, metrics=accuracy, verbose=False)
-    learn.fit_one_cycle(cfg["EPOCHS"])
+def train_model(dls, model_type: str):
+    model = ts_learner(dls, model_type, metrics=accuracy, verbose=False)
+    model.fit_one_cycle(cfg["EPOCHS"])
+    return model
+    
+
+def test_model(learn, X_t, y_t):
     _, _, preds = learn.get_X_preds(X_t, y_t, with_decoded=True)
     # Convert the string to a list
     preditions = ast.literal_eval(preds)
@@ -91,7 +96,7 @@ if __name__ == '__main__':
     loguru.logger.info(f'Split dataset')
 
     tfms = [None, [Categorize()]]
-    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=[64, 128])
+    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=64)
 
     accuracy_dict = {}
     for model in MODELS:
@@ -100,16 +105,22 @@ if __name__ == '__main__':
         accuracy_dict[model] = {"accuracy": [], "mean": None, "std": None, "average_time": None}
         X_t, y_t, splits = combine_split_data([X_t], [y_t])
         
-        times = []
+        train_times, test_time = [], []
         for _ in tqdm(range(cfg["NUM_RUNS"])):
             start_time = time.perf_counter()
-            accuracy_dict[model]["accuracy"].append(fit_and_evaluate_model(dls, X_t, y_t, model))
+            m = train_model(dls, X_t, y_t, model)
             end_time = time.perf_counter()
-            times.append(end_time - start_time)
+            train_times.append(end_time - start_time)
+
+            start_time = time.perf_counter()
+            accuracy = test_model(m, X_t, y_t)
+            end_time = time.perf_counter()
+            accuracy_dict[model]["accuracy"].append(accuracy)
             
         accuracy_dict[model]["mean"] = np.mean(accuracy_dict[model]["accuracy"])
         accuracy_dict[model]["std"] = np.std(accuracy_dict[model]["accuracy"])
-        accuracy_dict[model]["average_time"] = np.mean(times)
+        accuracy_dict[model]["train_average_time"] = np.mean(train_times)
+        accuracy_dict[model]["test_average_time"] = np.mean(test_time)
 
     filename = f'{load}_baseline.json'
     with open(os.path.join(OUTPUT_DIR, filename), 'w') as f:
