@@ -6,6 +6,8 @@ import time
 import json
 import loguru
 import argparse
+
+import tsai.learner
 sys.path.append('../')
 
 import numpy as np
@@ -44,9 +46,9 @@ def construct_dataset(filenames: List[str], load:str, train: bool=True):
 
 
 def train_model(dls, model_type: str):
-    model = ts_learner(dls, model_type, metrics=accuracy, verbose=False)
-    model.fit_one_cycle(cfg["EPOCHS"])
-    return model
+    learner = ts_learner(dls, model_type, metrics=accuracy, verbose=False)
+    learner.fit_one_cycle(cfg["EPOCHS"])
+    return learner
     
 
 def test_model(learn, X_t, y_t):
@@ -57,10 +59,27 @@ def test_model(learn, X_t, y_t):
     return sum(preditions == y_t) / len(y_t)*100
 
 
+def get_model_parameters_size(model):
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    return trainable_params, total_params
+
+def get_model_size(model):
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+
+    size_all_mb = (param_size + buffer_size) / 1024**2
+    return size_all_mb
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Control the load, model type, number of runs, and more.")
     
-    parser.add_argument('load', type=str, help="The load to be used (e.g., '20kg').")
+    parser.add_argument('load', type=str, help="The load to be used (e.g., 20kg).")
     parser.add_argument('-v', '--verbose', action='store_true', help="Enable verbose logging.")
 
     return parser.parse_args()
@@ -96,19 +115,28 @@ if __name__ == '__main__':
     loguru.logger.info(f'Split dataset')
 
     tfms = [None, [Categorize()]]
-    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=64)
+    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=[64, 64])
 
     accuracy_dict = {}
     for model in MODELS:
         loguru.logger.info(f'Running {model}')
         
-        accuracy_dict[model] = {"accuracy": [], "mean": None, "std": None, "average_time": None}
+        accuracy_dict[model] = {"accuracy": [], 
+                                "mean": None, 
+                                "std": None, 
+                                "train_average_time": None,
+                                "test_average_time": None,
+                                "trainable_params": None,
+                                "total_params": None,
+                                "model_size(Mb)": None}
+        
         X_t, y_t, splits = combine_split_data([X_t], [y_t])
         
+        trained_models = []
         train_times, test_time = [], []
         for _ in tqdm(range(cfg["NUM_RUNS"])):
             start_time = time.perf_counter()
-            m = train_model(dls, X_t, y_t, model)
+            m = train_model(dls, model)
             end_time = time.perf_counter()
             train_times.append(end_time - start_time)
 
@@ -116,11 +144,19 @@ if __name__ == '__main__':
             accuracy = test_model(m, X_t, y_t)
             end_time = time.perf_counter()
             accuracy_dict[model]["accuracy"].append(accuracy)
+            test_time.append(end_time - start_time)
+            
+        t_p, total_p = get_model_parameters_size(m.model)    
+        model_size = get_model_size(m.model)
             
         accuracy_dict[model]["mean"] = np.mean(accuracy_dict[model]["accuracy"])
         accuracy_dict[model]["std"] = np.std(accuracy_dict[model]["accuracy"])
         accuracy_dict[model]["train_average_time"] = np.mean(train_times)
         accuracy_dict[model]["test_average_time"] = np.mean(test_time)
+        assert t_p is not None and total_p is not None
+        accuracy_dict[model]["trainable_params"] = t_p
+        accuracy_dict[model]["total_params"] = total_p
+        accuracy_dict[model]["model_size(Mb)"] = model_size
 
     filename = f'{load}_baseline.json'
     with open(os.path.join(OUTPUT_DIR, filename), 'w') as f:
