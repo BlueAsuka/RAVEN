@@ -5,6 +5,7 @@ import sys
 import time
 import json
 import loguru
+import torch
 import argparse
 
 import tsai.learner
@@ -57,14 +58,14 @@ def test_model(X_t, y_t, learn):
     _, _, preds = learn.get_X_preds(X_t, y_t, with_decoded=True)
     # Convert the string to a list
     preditions = ast.literal_eval(preds)
-    # Calculate accuracy or other metrics as needed
-    return sum(preditions == y_t) / len(y_t)*100
+    return preditions
 
 
 def get_model_parameters_size(model):
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
     return trainable_params, total_params
+
 
 def get_model_size(model):
     param_size = 0
@@ -100,7 +101,9 @@ if __name__ == '__main__':
         loguru.logger.enable("__main__")
     else:
         loguru.logger.disable("__main__")
-    
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     filenames = [os.listdir(os.path.join(INSTANCES_DIR, load, state)) for state in STATES]
     filenames = [filename for sublist in filenames for filename in sublist]
     loguru.logger.info(f'Read {len(filenames)} files for learning')
@@ -118,7 +121,7 @@ if __name__ == '__main__':
     loguru.logger.info(f'Split dataset')
 
     tfms = [None, [Categorize()]]
-    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=[64, 64], device='cpu')
+    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=[64, 64], device=device)
 
     # labels = np.unique(y_t)
     # y_t_encoded = np.array([np.where(y == labels)[0][0] for y in y_t])
@@ -153,8 +156,9 @@ if __name__ == '__main__':
             train_times.append(end_time - start_time)
             
             start_time = time.perf_counter()
-            accuracy = test_model(X_t, y_t, learner)
+            preditions = test_model(X_t, y_t, learner)
             end_time = time.perf_counter()
+            accuracy = sum(preditions == y_t) / len(y_t)*100
             accuracy_dict[model]["accuracy"].append(accuracy)
             test_time.append(end_time - start_time)
             
