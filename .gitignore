@@ -3,3 +3,5 @@
 /__pycache__
 *.pickle
 *.pkl
+/data/linear_acuator
+/data
