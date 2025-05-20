@@ -47,12 +47,12 @@ STATES = ['normal',
 RE_STATES = ['no_obvious_fault', 'light_spalling', 'medium_spalling', 
              'heavy_spalling', 'backlash', 'lack_lubrication']
 LOADS= ['20kg', '40kg', '-40kg']
-INFERENCE_RATE = 0.3 # the percentage of inference instances
+INFERENCE_RATE = 0.2 # the percentage of inference instances
 REPEAT = 5 # repeat 5 times in each test
 VERBO = True
 
 
-with open('../config.configs.json') as f:
+with open('config/config.json') as f:
     cfg = json.load(f)
 time_series_transform = TimeSeriesTransform(cfg)
 

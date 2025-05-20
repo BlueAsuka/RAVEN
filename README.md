@@ -35,11 +35,17 @@ The code is tested and run on Windows 10 OS, the code is written in Python 3.10.
 `pip install -r requirements.txt`
 
 ##### Commands
-run `data_processing.py` for dataset construction
+For dataset construction
+`python data_processing.py`
 
-run `baseline.py` for comparison to other models
+For comparison to other models
+`python baseline.py 20kg -v`
+`python baseline.py 40kg -v`
+`python baseline.py -v -- -40kg`
 
-run `raven.py` to run the raven model to get the results
+For running the raven model
+`python raven.py` 
+run to run the raven model to get the results
 
 ##### Notebooks
 `raven_demo.ipynb` for illustating the step-by-step process of the raven model.

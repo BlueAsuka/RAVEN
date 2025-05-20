@@ -42,7 +42,15 @@ class TimeSeriesTransform:
         if method == 'ewma':
             smoothed = ts_df[field].ewm(span=self.cfg['EWA_SPAN']).mean().values
         elif method == 'ma':
-            smoothed = ts_df[field].rolling(window=self.cfg['MA_WINDOW_SIZE']).mean().values
+            # smoothed = ts_df[field].rolling(window=self.cfg['MA_WINDOW_SIZE']).mean().values
+            X = ts_df[field].to_numpy()
+            smoothed = np.zeros(X.shape[0])
+            k = self.cfg['MA_WINDOW_SIZE']
+            for t in range(X.shape[0]):
+                if t < k:
+                    smoothed[t] = np.mean(X[:t+1])
+                else:
+                    smoothed[t] = np.sum(X[t-k:t])/k
         elif method == 'gaussian':
             smoothed = gaussian_filter1d(ts_df[field].values, sigma=self.cfg['GAUSSIAN_SIGMA'])
         elif method == 'savgol_filter':
@@ -51,7 +59,7 @@ class TimeSeriesTransform:
             loguru.logger.warning(f"Smoothing method {method} is not supported, use {self.cfg['DEFAULT_SMOOTHING_METHOD']} instead.")
             smoothed = self.smoothing(ts_df, field, method=self.cfg['DEFAULT_SMOOTHING_METHOD'])
         
-        return np.array(smoothed)
+        return smoothed if isinstance(smoothed, np.ndarray) else np.array(smoothed)
 
 
     def get_fft(self, ts: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

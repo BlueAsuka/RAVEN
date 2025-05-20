@@ -140,11 +140,12 @@ class Rocket(nn.Module):
                 channel_kernels.append(kernel)
             
             # Stack the channel kernels
+            
             kernel_tensor = torch.stack(channel_kernels)
             batch.append(kernel_tensor)
         
         # Final shape: (kernel_num, in_channels, kernel_size)
-        return torch.stack(batch)
+        return torch.stack(batch) * (1 / np.sqrt(self.in_channels))
         
     def generate_random_kernels(self) -> torch.Tensor:
         """
@@ -189,7 +190,8 @@ class Rocket(nn.Module):
             # 1D convolution instead of 2D
             f_x = F.conv1d(x, self.kernel_tensor, dilation=dilation, padding=padding)
             
-            acti = self.activation(self.sigmoid_coeff * f_x)
+            # acti = self.activation(self.sigmoid_coeff * f_x)
+            acti = torch.relu(f_x)
             
             # 1D adaptive pooling instead of 2D
             pooling = self.adp_pooling(acti)
