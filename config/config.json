@@ -7,7 +7,7 @@
     "SAVGOL_POLYORDER": 2,
     "RANDOM_STATE": 42,
 
-    "EPOCHS": 300,
+    "EPOCHS": 100,
     "NUM_RUNS": 5,
 
     "LOWER_BOUND": 0.1,

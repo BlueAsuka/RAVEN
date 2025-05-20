@@ -18,6 +18,8 @@ from typing import List
 from transform import *
 from tsai.all import *
 
+from torch.utils.data import DataLoader, TensorDataset
+
 cfg = json.load(open("config/config.json"))
 ts_transform = TimeSeriesTransform(cfg)
 
@@ -51,7 +53,7 @@ def train_model(dls, model_type: str):
     return learner
     
 
-def test_model(learn, X_t, y_t):
+def test_model(X_t, y_t, learn):
     _, _, preds = learn.get_X_preds(X_t, y_t, with_decoded=True)
     # Convert the string to a list
     preditions = ast.literal_eval(preds)
@@ -112,11 +114,22 @@ if __name__ == '__main__':
     loguru.logger.info(f'Construct dataset for training and inference')
     
     X, y, splits = combine_split_data([X], [y]) 
+    X_t, y_t, splits_t = combine_split_data([X_t], [y_t])
     loguru.logger.info(f'Split dataset')
 
     tfms = [None, [Categorize()]]
-    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=[64, 64])
+    dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=[64, 64], device='cpu')
 
+    # labels = np.unique(y_t)
+    # y_t_encoded = np.array([np.where(y == labels)[0][0] for y in y_t])
+    
+    # test_ds = TensorDataset(
+    #     torch.tensor(X_t).float().unsqueeze(1),
+    #     torch.tensor(y_t_encoded).long(),
+    # )
+    
+    # test_dl = DataLoader(test_ds, batch_size=64, shuffle=False)
+    
     accuracy_dict = {}
     for model in MODELS:
         loguru.logger.info(f'Running {model}')
@@ -130,24 +143,23 @@ if __name__ == '__main__':
                                 "total_params": None,
                                 "model_size(Mb)": None}
         
-        X_t, y_t, splits = combine_split_data([X_t], [y_t])
         
         trained_models = []
         train_times, test_time = [], []
         for _ in tqdm(range(cfg["NUM_RUNS"])):
             start_time = time.perf_counter()
-            m = train_model(dls, model)
+            learner = train_model(dls, model)
             end_time = time.perf_counter()
             train_times.append(end_time - start_time)
-
+            
             start_time = time.perf_counter()
-            accuracy = test_model(m, X_t, y_t)
+            accuracy = test_model(X_t, y_t, learner)
             end_time = time.perf_counter()
             accuracy_dict[model]["accuracy"].append(accuracy)
             test_time.append(end_time - start_time)
             
-        t_p, total_p = get_model_parameters_size(m.model)    
-        model_size = get_model_size(m.model)
+        t_p, total_p = get_model_parameters_size(learner.model)    
+        model_size = get_model_size(learner.model)
             
         accuracy_dict[model]["mean"] = np.mean(accuracy_dict[model]["accuracy"])
         accuracy_dict[model]["std"] = np.std(accuracy_dict[model]["accuracy"])
