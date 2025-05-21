@@ -5,3 +5,4 @@
 *.pkl
 /data/linear_acuator
 /data
+/outputs
