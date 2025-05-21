@@ -1,16 +1,17 @@
 import re
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import json
 import numpy as np
 import pandas as pd
 from transform import TimeSeriesTransform
 
 
-cfg = json.load(open("config/config.json"))
-ts_trans = TimeSeriesTransform(cfg)
-
-
 def get_X_y(data_dir, filenames, load):
+    cfg = json.load(open("config/config.json"))
+    ts_trans = TimeSeriesTransform(cfg)
+    
     X, y = [], []
     for filename in filenames:
         load_num = load[:-2]

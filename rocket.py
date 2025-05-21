@@ -1,251 +1,378 @@
+"""Code for RandOm Convolutional KErnel Transformation implemented with PyTorch."""
+
 import torch
-import numpy as np
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+from sklearn.base import BaseEstimator
+from sklearn.utils.validation import check_array, check_is_fitted, check_random_state
 
 
-# class Rocket(nn.Module):
+def generate_kernels(n_kernels, n_timestamps, kernel_sizes, seed):
+    """Generate the kernels.
+
+    Parameters
+    ----------
+    n_kernels : int
+        Number of kernels
+
+    n_timestamps : int
+        Number of timestamps
+
+    kernel_sizes : array
+        Possible sizes for the kernels.
+
+    seed : int
+        Seed for the random number generator.
+
+    Returns
+    -------
+    weights : torch.Tensor, shape = (n_kernels, max(kernel_sizes))
+        Weights of the kernels. Zero padding values are added.
+
+    lengths : torch.Tensor, shape = (n_kernels,)
+        Length of each kernel.
+
+    biases : torch.Tensor, shape = (n_kernels,)
+        Bias of each kernel.
+
+    dilations : torch.Tensor, shape = (n_kernels,)
+        Dilation of each kernel.
+
+    paddings : torch.Tensor, shape = (n_kernels,)
+        Padding of each kernel.
+    """
+    # Set the random seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)  # Used for numpy random choice
+
+    # Select random kernel lengths
+    lengths = torch.tensor(np.random.choice(kernel_sizes, size=n_kernels), dtype=torch.int64)
     
-#     def __init__(self, 
-#                  sequence_length: int, 
-#                  kernel_size: int, 
-#                  kernel_num: int, 
-#                  in_channels: int,
-#                  device: torch.device, 
-#                  random_state: int=42,
-#                  init_type: str='sparse',
-#                  sparsity: float=0.8,
-#                  sigmoid_coeff: float = 50,
-#                  pretrain: bool = False):
-#         """
-#         Args:
-#             sequence_length (int): Length of the input time series
-#             kernel_size (int): Size of the 1D kernel
-#             kernel_num (int): Number of kernels
-#             in_channels (int): Number of input channels
-#             device (str): Device to run the model
-#             random_state (int, optional): Random seed for reproducibility. Defaults to 42.
-#             init_type (str, optional): Weight initialization (random or sparse). Default is 'sparse'
-#             sparsity (float, optional): Sparsity of the kernel. Default is 0.8
-#             sigmoid_coeff (float, optional): Coefficient for sigmoid activation. Default is 50
-#             pretrain (bool, optional): Whether to use a pre-trained model. Defaults to False.
-#         """
-#         super(Rocket, self).__init__()
-        
-#         self.sequence_length = sequence_length 
-#         self.kernel_size = kernel_size
-#         self.kernel_num = kernel_num
-#         self.in_channels = in_channels
-#         self.device = device
-#         self.random_state = random_state
-#         self.pretrain = pretrain
-#         self.init_type = init_type
-#         self.sparsity = sparsity
-#         self.sigmoid_coeff = sigmoid_coeff
-#         self.dilations = self.generate_dilations()
-#         self.adp_pooling = nn.AdaptiveAvgPool1d(1)
-#         self.activation = nn.Sigmoid()
-        
-#         if not self.pretrain:
-#             np.random.seed(self.random_state)
-#             torch.manual_seed(self.random_state)
-#             self.init_weights(self.init_type)
+    # Generate random weights for all kernels
+    max_kernel_size = int(torch.max(lengths).item())
+    weights = torch.zeros((n_kernels, max_kernel_size))
     
-#     def init_weights(self, init_type: str):
-#         """
-#         Initialize weights.
-        
-#         Args:
-#             init_type (str): Initialization type ('sparse' or 'random').
-#         """
-#         if self.random_state is None:  # Set random seed if random_state is provided
-#             self.random_state = 42
-#         np.random.seed(self.random_state)
-#         torch.manual_seed(self.random_state)
-        
-#         if init_type == 'sparse':
-#             self.kernel_tensor = nn.Parameter(
-#                 self.generate_sparse_kernels().to(self.device), requires_grad=False
-#             )
-#         elif init_type == 'random':
-#             self.kernel_tensor = nn.Parameter(
-#                 self.generate_random_kernels().to(self.device), requires_grad=False
-#             )
-#         else:
-#             raise ValueError(f'Invalid init_type: {init_type}')
-        
-#     def load_pretrained_params(self, kernel_tensor: torch.Tensor):
-#         """
-#         Load a pre-trained model.
-
-#         Args:
-#             kernel_tensor (torch.Tensor): Tensor of kernels.
-#         """
-#         self.kernel_tensor = kernel_tensor
-        
-#     def get_params(self) -> list:
-#         """
-#         Get parameters of the model.
-
-#         Returns:
-#             List of params.
-#         """
-#         return [self.sequence_length, self.kernel_num, self.kernel_size, self.sparsity, self.sigmoid_coeff]
+    # Generate random weights and center them (subtract mean)
+    for i in range(n_kernels):
+        length = lengths[i].item()
+        kernel_weights = torch.randn(length)
+        weights[i, :length] = kernel_weights - kernel_weights.mean()
     
-#     def generate_dilations(self) -> torch.Tensor:
-#         """
-#         Generate dilations for 1D convolution
-
-#         Args:
-#             None
-
-#         Returns:
-#             torch.Tensor: Tensor of dilations 
-#         """
-#         dilation_max = np.log2((self.sequence_length - 1) / (self.kernel_size - 1))
-#         dilation_exp = np.arange(0, np.ceil(dilation_max))
-#         dilation_exp = np.append(dilation_exp, dilation_max)
-#         dilations = np.unique(np.floor(2 ** dilation_exp))
-#         dilations = dilations.astype(int)
-#         return dilations
+    # Generate random biases
+    biases = torch.rand(n_kernels) * 2 - 1  # Uniform between -1 and 1
     
-#     def generate_sparse_kernels(self):
-#         """
-#         Generate a batch of 1D tensors with sparsity
-        
-#         Args:
-#             None
-            
-#         Returns:
-#             torch.Tensor: Batch of 1D tensors with the desired properties.
-#         """
-#         assert 0 <= self.sparsity <= 1, "Sparsity must be between 0 and 1"
-        
-#         torch.manual_seed(self.random_state)
-        
-#         batch = []
-#         for _ in range(self.kernel_num):
-#             # Create a kernel for each input channel
-#             channel_kernels = []
-#             for c in range(self.in_channels):
-#                 # Generate random kernel for this channel
-#                 kernel = torch.randn(self.kernel_size, dtype=torch.float32)
-                
-#                 # Apply sparsity
-#                 num_zeros = int(self.sparsity * self.kernel_size)
-#                 if num_zeros > 0:
-#                     zero_indices = torch.randperm(self.kernel_size)[:num_zeros]
-#                     kernel[zero_indices] = 0
-                
-#                 channel_kernels.append(kernel)
-            
-#             # Stack the channel kernels
-            
-#             kernel_tensor = torch.stack(channel_kernels)
-#             batch.append(kernel_tensor)
-        
-#         # Final shape: (kernel_num, in_channels, kernel_size)
-#         return torch.stack(batch) * (1 / np.sqrt(self.in_channels))
-        
-#     def generate_random_kernels(self) -> torch.Tensor:
-#         """
-#         Generate multiple random 1D kernels
-
-#         Args:
-#             None
-
-#         Returns:
-#             torch.Tensor: Tensor of random kernels in the shape of (num_kernels, in_channels, kernel_size)
-#         """
-#         kernels = []
-#         for _ in range(self.kernel_num):
-#             kernel = torch.randn((self.in_channels, self.kernel_size), dtype=torch.float32)
-#             kernels.append(kernel)
-        
-#         kernels_tensor = torch.stack(kernels)
-        
-#         return kernels_tensor
+    # Calculate dilations
+    upper_bounds = torch.log2(torch.floor_divide(
+        torch.tensor(n_timestamps - 1, dtype=torch.float32), 
+        (lengths.float() - 1)
+    ))
     
-#     def normalize(self, x, eps=1e-8):
-#         # x shape: (B, C, L) - batch, channels, length
-#         mean = x.mean(dim=(0, 2), keepdim=True)  # one μ per channel
-#         std = x.std(dim=(0, 2), keepdim=True)
-#         return (x - mean) / (std + eps)
+    powers = torch.zeros(n_kernels)
+    for i in range(n_kernels):
+        powers[i] = torch.rand(1).item() * upper_bounds[i].item()
     
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         """
-#         Forward pass of the model
-
-#         Args:
-#             x (torch.Tensor): Input tensor in the shape of (batch_size, in_channels, sequence_length)
-
-#         Returns:
-#             ppvs (torch.Tensor): the portion of positive values in the shape of (batch_size, num_kernels * num_dilations)
-#         """
-#         ppvs = []
-#         for dilation in self.dilations:
-#             # Calculate padding to maintain the output length
-#             padding = (self.kernel_size // 2) * dilation
-            
-#             # 1D convolution instead of 2D
-#             f_x = F.conv1d(x, self.kernel_tensor, dilation=dilation, padding=padding)
-            
-#             # acti = self.activation(self.sigmoid_coeff * f_x)
-#             acti = torch.relu(f_x)
-            
-#             # 1D adaptive pooling instead of 2D
-#             pooling = self.adp_pooling(acti)
-            
-#             ppvs.append(pooling.view(x.shape[0], -1))
-
-#         return torch.cat(ppvs, dim=1)
-
-class Rocket(nn.Module):
-    def __init__(self, device):
-        super(Rocket, self).__init__()
-        self.kernel_size = 11
-        self.n_kernels = 4900
-        self.device = device
-        self.kernel_tensor = nn.Parameter(
-            torch.randn(self.n_kernels, 1, self.kernel_size).to(device), requires_grad=False
-        )
-
-    def forward(self, x):
-        f_x = F.conv1d(x, self.kernel_tensor, padding=0)
-        ppvs = (f_x > 0).sum(dim=(2)).float() / (f_x.shape[-1])
-        maxs = f_x.max(dim=(2)).values
-        return torch.cat([ppvs, maxs], dim=1)
-
-class RidgeClassifier(nn.Module):
-    def __init__(self, input_dim, output_dim, device):
-        super(RidgeClassifier, self).__init__()
-        self.linear = nn.Linear(input_dim, output_dim, bias=True, device=device)
-
-    def forward(self, x):
-        return self.linear(x)  # Raw scores
+    dilations = torch.floor(torch.pow(2, powers)).to(torch.int64)
     
-
-if __name__ == '__main__':
-    # Example usage
-    # Create a model instance
-    sequence_length = 256
-    kernel_size = 11
-    kernel_num = 512
-    in_channels = 1
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    model = Rocket(
-        sequence_length=sequence_length,
-        kernel_size=kernel_size,
-        kernel_num=kernel_num,
-        in_channels=in_channels,
-        device=device,
-        # init_type='random'
+    # Calculate paddings
+    paddings = torch.zeros(n_kernels, dtype=torch.int64)
+    padding_cond = torch.randint(0, 2, (n_kernels,)).bool()
+    paddings[padding_cond] = torch.floor_divide(
+        (lengths[padding_cond] - 1) * dilations[padding_cond], 2
     )
     
-    # Generate a sample input (batch_size, in_channels, sequence_length)
-    sample_input = torch.randn(16, in_channels, sequence_length).to(device)
+    return weights, lengths, biases, dilations, paddings
+
+
+def apply_kernels_batch(X, weights, lengths, biases, dilations, paddings, device=None):
+    """Apply all kernels to a batch of time series using PyTorch operations.
     
-    # Forward pass
-    output = model(sample_input)
-    print(f"Output shape: {output.shape}")
+    Parameters
+    ----------
+    X : torch.Tensor, shape = (n_samples, n_timestamps)
+        Input data.
+        
+    weights : torch.Tensor, shape = (n_kernels, max(kernel_sizes))
+        Weights of the kernels.
+        
+    lengths : torch.Tensor, shape = (n_kernels,)
+        Length of each kernel.
+        
+    biases : torch.Tensor, shape = (n_kernels,)
+        Bias of each kernel.
+        
+    dilations : torch.Tensor, shape = (n_kernels,)
+        Dilation of each kernel.
+        
+    paddings : torch.Tensor, shape = (n_kernels,)
+        Padding of each kernel.
+        
+    device : str or torch.device, optional
+        Device to run the computations on.
+        
+    Returns
+    -------
+    X_new : torch.Tensor, shape = (n_samples, 2 * n_kernels)
+        Extracted features using all the kernels.
+    """
+    if device is not None:
+        X = X.to(device)
+        weights = weights.to(device)
+        lengths = lengths.to(device)
+        biases = biases.to(device)
+        dilations = dilations.to(device)
+        paddings = paddings.to(device)
+    
+    n_samples, n_timestamps = X.shape
+    n_kernels = lengths.size(0)
+    
+    # Prepare output tensor
+    X_new = torch.empty((n_samples, 2 * n_kernels), device=X.device)
+    
+    for k in range(n_kernels):
+        length = lengths[k].item()
+        weight = weights[k, :length]
+        bias = biases[k].item()
+        dilation = dilations[k].item()
+        padding = paddings[k].item()
+    
+        # Apply convolution using PyTorch's conv1d
+        # X shape: (n_samples, 1, n_timestamps)
+        # Add padding if needed
+        x_pad = torch.nn.functional.pad(X.unsqueeze(1), (padding, padding))
+        
+        # Reshape weight for conv1d: (out_channels, in_channels, kernel_size)
+        weight_reshaped = weight.view(1, 1, -1)
+        
+        # Apply convolution with dilation
+        x_conv = torch.nn.functional.conv1d(
+            x_pad, 
+            weight_reshaped, 
+            bias=None,  # We'll add bias manually after convolution
+            stride=1, 
+            padding=0, 
+            dilation=dilation
+        ).squeeze(1)
+        
+        # Add bias
+        x_conv = x_conv + bias
+        
+        # Extract features: maximum and proportion of positive values
+        X_new[:, 2 * k] = torch.max(x_conv, dim=1)[0]
+        # X_new[:, 2 * k + 1] = torch.mean((x_conv > 0).float(), dim=1)
+        X_new[:, 2 * k + 1] = torch.mean(torch.sigmoid(50 * x_conv), dim=1)
+    return X_new
+
+
+class PyTorchROCKET(BaseEstimator):
+    """PyTorch implementation of RandOm Convolutional KErnel Transformation.
+
+    This algorithm randomly generates a great variety of convolutional kernels
+    and extracts two features for each convolution: the maximum and the
+    proportion of positive values. This implementation uses PyTorch to support
+    GPU acceleration.
+
+    Parameters
+    ----------
+    n_kernels : int (default = 10000)
+        Number of kernels.
+
+    kernel_sizes : array-like (default = (7, 9, 11))
+        The possible sizes of the kernels.
+
+    random_state : None, int or RandomState instance (default = None)
+        The seed of the pseudo random number generator to use when shuffling
+        the data.
+        
+    device : str or torch.device or None (default = None)
+        Device to use for computation. If None, uses CUDA if available, otherwise CPU.
+
+    Attributes
+    ----------
+    weights_ : torch.Tensor, shape = (n_kernels, max(kernel_sizes))
+        Weights of the kernels. Zero padding values are added.
+
+    length_ : torch.Tensor, shape = (n_kernels,)
+        Length of each kernel.
+
+    bias_ : torch.Tensor, shape = (n_kernels,)
+        Bias of each kernel.
+
+    dilation_ : torch.Tensor, shape = (n_kernels,)
+        Dilation of each kernel.
+
+    padding_ : torch.Tensor, shape = (n_kernels,)
+        Padding of each kernel.
+        
+    device_ : torch.device
+        The device used for computation.
+
+    References
+    ----------
+    .. [1] A. Dempster, F. Petitjean and G. I. Webb, "ROCKET: Exceptionally
+           fast and accurate time series classification using random
+           convolutional kernels". https://arxiv.org/abs/1910.13051.
+    """
+    
+    def __init__(self, n_kernels=10000, kernel_sizes=(7, 9, 11), random_state=None, device=None):
+        self.n_kernels = n_kernels
+        self.kernel_sizes = kernel_sizes
+        self.random_state = random_state
+        self.device = device
+
+    def fit(self, X, y=None):
+        """Fit the model according to the given training data.
+
+        Parameters
+        ----------
+        X : array-like, shape = (n_samples, n_timestamps)
+            Training vector.
+
+        y : None or array-like, shape = (n_samples,)
+            Class labels for each data sample. Ignored.
+
+        Returns
+        -------
+        self : object
+        """
+        # Check input data
+        X = check_array(X, dtype='float64')
+        n_samples, n_timestamps = X.shape
+        
+        # Set device
+        if self.device is None:
+            self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device_ = torch.device(self.device)
+        
+        # Check parameters
+        kernel_sizes, seed = self._check_params(n_timestamps)
+        
+        # Generate the kernels
+        weights, lengths, biases, dilations, paddings = generate_kernels(
+            self.n_kernels, n_timestamps, kernel_sizes, seed
+        )
+        
+        # Store parameters
+        self.weights_ = weights
+        self.length_ = lengths
+        self.bias_ = biases
+        self.dilation_ = dilations
+        self.padding_ = paddings
+        
+        return self
+
+    def transform(self, X):
+        """Transform the provided data.
+
+        Parameters
+        ----------
+        X : array-like, shape = (n_samples, n_timestamps)
+            Test samples.
+
+        Returns
+        -------
+        X_new : numpy.ndarray, shape = (n_samples, 2 * n_kernels)
+            Extracted features from the kernels.
+        """
+        # Check that the estimator is fitted
+        check_is_fitted(self, ['weights_', 'length_', 'bias_', 'dilation_', 'padding_'])
+        
+        # Check input data
+        X = check_array(X, dtype='float64')
+        
+        # Convert to torch tensor
+        X_tensor = torch.tensor(X, dtype=torch.float32)
+        
+        # Apply kernels to extract features
+        X_new = apply_kernels_batch(
+            X_tensor, 
+            self.weights_, 
+            self.length_, 
+            self.bias_, 
+            self.dilation_, 
+            self.padding_,
+            device=self.device_
+        )
+        
+        # Convert back to numpy array
+        return X_new
+
+    def _check_params(self, n_timestamps):
+        """Check parameters and return validated kernel_sizes and random seed."""
+        if not isinstance(self.n_kernels, (int, np.integer)):
+            raise TypeError("'n_kernels' must be an integer (got {})."
+                            .format(self.n_kernels))
+
+        if not isinstance(self.kernel_sizes, (list, tuple, np.ndarray)):
+            raise TypeError("'kernel_sizes' must be a list, a tuple or "
+                            "an array (got {}).".format(self.kernel_sizes))
+                            
+        kernel_sizes = check_array(self.kernel_sizes, ensure_2d=False,
+                                  dtype='int64', accept_large_sparse=False)
+                                  
+        if not np.all(1 <= kernel_sizes):
+            raise ValueError("All the values in 'kernel_sizes' must be "
+                            "greater than or equal to 1 ({} < 1)."
+                            .format(kernel_sizes.min()))
+                            
+        if not np.all(kernel_sizes <= n_timestamps):
+            raise ValueError("All the values in 'kernel_sizes' must be lower "
+                            "than or equal to 'n_timestamps' ({} > {})."
+                            .format(kernel_sizes.max(), n_timestamps))
+
+        rng = check_random_state(self.random_state)
+        seed = rng.randint(np.iinfo(np.uint32).max, dtype='u8')
+
+        return kernel_sizes, seed
+
+
+class PytorchRidgeClassifier(nn.Module):
+    def __init__(self, input_dim, num_classes):
+        super(PytorchRidgeClassifier, self).__init__()
+        self.linear = nn.Linear(input_dim, num_classes, bias=True)
+
+    def forward(self, x):
+        return self.linear(x)  # Output shape: (batch_size, num_classes)
+
+
+def train(model, X_train, y_train, l2_reg=1.0, epochs=100, lr=0.01):
+    optimizer = optim.SGD(model.parameters(), lr=lr)
+
+    # # One-hot encode labels: shape (N, C)
+    # y_onehot = torch.zeros(X_train.size(0), model.linear.out_features, device=X_train.device)
+    # y_onehot.scatter_(1, y_train.view(-1, 1), 1)
+    # # Map {0,1} to {-1, 1}
+    # y_target = 2 * y_onehot - 1
+
+    # for epoch in range(epochs):
+    #     model.train()
+    #     optimizer.zero_grad()
+
+    #     outputs = model(X_train)  # Shape: (N, C)
+    #     loss = torch.mean((outputs - y_target)**2)  # Squared loss per class
+    #     # L2 regularization (weight decay)
+    #     l2_penalty = sum(torch.norm(param)**2 for param in model.parameters())
+    #     loss += l2_reg * l2_penalty
+    #     loss.backward()
+    #     optimizer.step()
+    # return model
+    criterion = nn.CrossEntropyLoss()
+    
+    for epoch in range(epochs):
+        model.train()
+        optimizer.zero_grad()
+
+        outputs = model(X_train)  # Shape: (N, C)
+        loss = criterion(outputs, y_train)
+        l2_penalty = sum(torch.norm(param)**2 for param in model.parameters())
+        loss += l2_reg * l2_penalty
+        loss.backward()
+        optimizer.step()
+    return model
+
+
+def predict(model, X):
+    with torch.no_grad():
+        logits = model(X)
+        return torch.argmax(logits, dim=1)  # Pick class with highest score

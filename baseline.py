@@ -58,7 +58,7 @@ def test_model(X_t, y_t, learn):
     _, _, preds = learn.get_X_preds(X_t, y_t, with_decoded=True)
     # Convert the string to a list
     preditions = ast.literal_eval(preds)
-    return preditions
+    return sum(preditions == y_t) / len(y_t)*100
 
 
 def get_model_parameters_size(model):
@@ -122,16 +122,6 @@ if __name__ == '__main__':
 
     tfms = [None, [Categorize()]]
     dls = get_ts_dls(X, y, splits=splits, tfms=tfms, bs=[64, 64], device=device)
-
-    # labels = np.unique(y_t)
-    # y_t_encoded = np.array([np.where(y == labels)[0][0] for y in y_t])
-    
-    # test_ds = TensorDataset(
-    #     torch.tensor(X_t).float().unsqueeze(1),
-    #     torch.tensor(y_t_encoded).long(),
-    # )
-    
-    # test_dl = DataLoader(test_ds, batch_size=64, shuffle=False)
     
     accuracy_dict = {}
     for model in MODELS:
@@ -156,9 +146,8 @@ if __name__ == '__main__':
             train_times.append(end_time - start_time)
             
             start_time = time.perf_counter()
-            preditions = test_model(X_t, y_t, learner)
+            accuracy =  test_model(X_t, y_t, learner)
             end_time = time.perf_counter()
-            accuracy = sum(preditions == y_t) / len(y_t)*100
             accuracy_dict[model]["accuracy"].append(accuracy)
             test_time.append(end_time - start_time)
             
